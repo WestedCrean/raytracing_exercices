@@ -1,5 +1,8 @@
+from typing import List
 from PIL import Image, ImageColor
 import numpy as np
+from numba import jit, njit
+import time
 from shapes import Sphere
 
 IMAGE_WIDTH = 600  # 1920
@@ -11,28 +14,26 @@ CAMERA_TO_VIEWPORT = 1  # d
 
 BACKGROUND_COLOR = ImageColor.getcolor("black", "RGB")
 
-scene_spheres = [
-    Sphere(0, 1, 3, radius=1, color="purple"),
-    Sphere(2, 0, 4, radius=1, color="yellow"),
-    Sphere(3, 1, 4, radius=1, color="red"),
-]
-
 
 def initialize():
     im = Image.new("RGB", (IMAGE_WIDTH, IMAGE_HEIGHT), color="white")
-    return im
+
+    scene = [
+        Sphere(0, 1, 3, radius=1, color="purple"),
+        Sphere(2, 0, 4, radius=1, color="yellow"),
+        Sphere(3, 1, 4, radius=1, color="red"),
+    ]
+    return im, scene
 
 
-def ray_sphere_intersection(origin, direction, sphere: Sphere):
+@njit(parallel=True)
+def ray_sphere_intersection(origin, direction, sphere):
     r = sphere.radius
     CO = origin - sphere.center
 
     a = np.dot(direction, direction)
     b = 2 * np.dot(CO, direction)
     c = np.dot(CO, CO) - r * r
-
-    # print(f"direction: {direction}")
-    # print(f"a,b,c = {a} {b} {c}")
 
     discriminant = (b * b) - 4 * (a * c)
 
@@ -41,11 +42,11 @@ def ray_sphere_intersection(origin, direction, sphere: Sphere):
 
     t1 = (-b + np.sqrt(discriminant)) / (2 * a)
     t2 = (-b + np.sqrt(discriminant)) / (2 * a)
-
     return t1, t2
 
 
-def trace_pixel_ray(origin, direction, t_min, t_max):
+@njit(parallel=True)
+def trace_pixel_ray(scene, origin, direction, t_min, t_max):
     # the ray equation
     # P = O + t(V-O)
     # or using vector D = (V - O) as direction of ray
@@ -54,7 +55,7 @@ def trace_pixel_ray(origin, direction, t_min, t_max):
     closest_t = np.inf  # infinity
     closest_sphere = None
 
-    for sphere in scene_spheres:
+    for sphere in scene:
         t1, t2 = ray_sphere_intersection(origin, direction, sphere)
 
         if t_min <= t1 <= t_max and t1 < closest_t:
@@ -79,7 +80,7 @@ def canvas_to_viewport(x, y):
     )
 
 
-def raytrace(im: Image):
+def raytrace(im: Image, scene: List[Sphere]):
     # main code goes here
 
     # 1. place the camera and the viewport as desired
@@ -88,17 +89,21 @@ def raytrace(im: Image):
     # for pixel on canvas:
     # for x in range(-IMAGE_WIDTH // 2, IMAGE_WIDTH // 2):
     # for y in range(-IMAGE_HEIGHT // 2, IMAGE_HEIGHT // 2):
+    print("start")
+    t1 = time.time()
     for x in range(im.width):
         for y in range(im.height):
             # 2. determine which square on viewport corresponds to this pixel
             D = canvas_to_viewport(x, y)
 
             # 3. determine the color seen through that square
-            color = trace_pixel_ray(camera_origin, D, 1, 1000)
+            color = trace_pixel_ray(scene, camera_origin, D, 1, 1000)
 
             # 4. paint the pixel with that color
             im.putpixel((x, y), color)
-
+    t2 = time.time()
+    print("done")
+    print(f"Time: {t2 - t1}")
     return im
 
 
@@ -107,8 +112,8 @@ def save(im, img_name="test_image.png"):
 
 
 def main():
-    im = initialize()
-    im = raytrace(im)
+    im, scene = initialize()
+    im = raytrace(im, scene)
     save(im)
 
 
