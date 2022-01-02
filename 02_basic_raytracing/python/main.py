@@ -1,16 +1,15 @@
 from typing import List
 from PIL import Image, ImageColor
 import numpy as np
-from numba import jit, njit
 import time
 from shapes import Sphere
 
-IMAGE_WIDTH = 600  # 1920
-IMAGE_HEIGHT = 600  # 1080
+IMAGE_WIDTH = 900  # 1920
+IMAGE_HEIGHT = 900  # 1080
 
-VIEWPORT_SIZE = 1
+VIEWPORT_SIZE = 2
 
-CAMERA_TO_VIEWPORT = 1  # d
+CAMERA_TO_VIEWPORT = 2  # d
 
 BACKGROUND_COLOR = ImageColor.getcolor("black", "RGB")
 
@@ -21,12 +20,11 @@ def initialize():
     scene = [
         Sphere(0, 1, 3, radius=1, color="purple"),
         Sphere(2, 0, 4, radius=1, color="yellow"),
-        Sphere(3, 1, 4, radius=1, color="red"),
+        Sphere(3, 3, 4, radius=1, color="red"),
     ]
     return im, scene
 
 
-@njit(parallel=True)
 def ray_sphere_intersection(origin, direction, sphere):
     r = sphere.radius
     CO = origin - sphere.center
@@ -45,7 +43,6 @@ def ray_sphere_intersection(origin, direction, sphere):
     return t1, t2
 
 
-@njit(parallel=True)
 def trace_pixel_ray(scene, origin, direction, t_min, t_max):
     # the ray equation
     # P = O + t(V-O)
@@ -89,8 +86,7 @@ def raytrace(im: Image, scene: List[Sphere]):
     # for pixel on canvas:
     # for x in range(-IMAGE_WIDTH // 2, IMAGE_WIDTH // 2):
     # for y in range(-IMAGE_HEIGHT // 2, IMAGE_HEIGHT // 2):
-    print("start")
-    t1 = time.time()
+
     for x in range(im.width):
         for y in range(im.height):
             # 2. determine which square on viewport corresponds to this pixel
@@ -101,9 +97,7 @@ def raytrace(im: Image, scene: List[Sphere]):
 
             # 4. paint the pixel with that color
             im.putpixel((x, y), color)
-    t2 = time.time()
-    print("done")
-    print(f"Time: {t2 - t1}")
+
     return im
 
 
