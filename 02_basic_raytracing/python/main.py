@@ -1,114 +1,132 @@
-from typing import List
-from PIL import Image, ImageColor
+import matplotlib.pyplot as plt
 import numpy as np
-import time
 from shapes import Sphere
+from lights import PositionalLight
 
-IMAGE_WIDTH = 900  # 1920
-IMAGE_HEIGHT = 900  # 1080
+IMAGE_WIDTH = 100  # 1920
+IMAGE_HEIGHT = 100  # 1080
+IMAGE_RATIO = float(IMAGE_WIDTH) / IMAGE_HEIGHT
 
-VIEWPORT_SIZE = 2
-
-CAMERA_TO_VIEWPORT = 2  # d
-
-BACKGROUND_COLOR = ImageColor.getcolor("black", "RGB")
+BACKGROUND_COLOR = np.zeros((255, 255, 255))
 
 
 def initialize():
-    im = Image.new("RGB", (IMAGE_WIDTH, IMAGE_HEIGHT), color="white")
+    image = np.zeros((IMAGE_HEIGHT, IMAGE_WIDTH, 3))
+
+    screen = (-1, 1 / IMAGE_RATIO, 1, -1 / IMAGE_RATIO)
+    camera = np.array([0, 0, 1])
 
     scene = [
-        Sphere(0, 1, 3, radius=1, color="purple"),
-        Sphere(2, 0, 4, radius=1, color="yellow"),
-        Sphere(3, 3, 4, radius=1, color="red"),
+        Sphere(-0.2, 0, -1, radius=0.7, diffuse=np.array([218, 255, 63])),
+        Sphere(0.1, -0.3, 0, radius=0.1, diffuse=np.array([0, 255, 205])),
+        Sphere(-0.3, 0, 0, radius=0.15, diffuse=np.array([27, 44, 193])),
     ]
-    return im, scene
+
+    light = PositionalLight(5.0, 5.0, 5.0)
+    return image, screen, camera, scene, light
 
 
 def ray_sphere_intersection(origin, direction, sphere):
-    r = sphere.radius
-    CO = origin - sphere.center
-
-    a = np.dot(direction, direction)
-    b = 2 * np.dot(CO, direction)
-    c = np.dot(CO, CO) - r * r
-
-    discriminant = (b * b) - 4 * (a * c)
-
-    if discriminant < 0:
-        return np.inf, np.inf
-
-    t1 = (-b + np.sqrt(discriminant)) / (2 * a)
-    t2 = (-b + np.sqrt(discriminant)) / (2 * a)
-    return t1, t2
+    b = 2 * np.dot(direction, origin - sphere.center)
+    c = np.linalg.norm(origin - sphere.center) ** 2 - sphere.radius ** 2
+    delta = b ** 2 - 4 * c
+    if delta > 0:
+        t1 = (-b + np.sqrt(delta)) / 2
+        t2 = (-b - np.sqrt(delta)) / 2
+        if t1 > 0 and t2 > 0:
+            return min(t1, t2)
+    return None
 
 
-def trace_pixel_ray(scene, origin, direction, t_min, t_max):
-    # the ray equation
-    # P = O + t(V-O)
-    # or using vector D = (V - O) as direction of ray
-    # P = O + tD
-
-    closest_t = np.inf  # infinity
-    closest_sphere = None
-
-    for sphere in scene:
-        t1, t2 = ray_sphere_intersection(origin, direction, sphere)
-
-        if t_min <= t1 <= t_max and t1 < closest_t:
-            closest_t = t1
-            closest_sphere = sphere
-
-        if t_min <= t2 <= t_max and t2 < closest_t:
-            closest_t = t2
-            closest_sphere = sphere
-
-    if not closest_sphere:
-        return BACKGROUND_COLOR
-
-    return closest_sphere.color
+def normalize(vector):
+    return vector / np.linalg.norm(vector)
 
 
-def canvas_to_viewport(x, y):
-    return (
-        x * (VIEWPORT_SIZE / IMAGE_WIDTH),
-        y * (VIEWPORT_SIZE / IMAGE_HEIGHT),
-        CAMERA_TO_VIEWPORT,
-    )
+def normalize_color(vector):
+    return vector / 255
 
 
-def raytrace(im: Image, scene: List[Sphere]):
+def nearest_intersected_object(objects, ray_origin, ray_direction):
+    distances = [
+        ray_sphere_intersection(ray_origin, ray_direction, obj) for obj in objects
+    ]
+    nearest_object = None
+    min_distance = np.inf
+
+    index = 0
+    for index, distance in enumerate(distances):
+        if distance and distance < min_distance:
+            min_distance = distance
+            nearest_object = objects[index]
+    return nearest_object, min_distance
+
+
+def raytrace(image, screen, camera, scene, light):
     # main code goes here
+    for i, y in enumerate(np.linspace(screen[1], screen[3], IMAGE_HEIGHT)):
+        for j, x in enumerate(np.linspace(screen[0], screen[2], IMAGE_WIDTH)):
 
-    # 1. place the camera and the viewport as desired
-    camera_origin = np.array((0, 0, 0))
+            pixel = np.array([x, y, 0])
+            origin = camera
+            direction = normalize(pixel - origin)
 
-    # for pixel on canvas:
-    # for x in range(-IMAGE_WIDTH // 2, IMAGE_WIDTH // 2):
-    # for y in range(-IMAGE_HEIGHT // 2, IMAGE_HEIGHT // 2):
+            # check for intersections
+            nearest_object, min_distance = nearest_intersected_object(
+                scene, origin, direction
+            )
+            if not nearest_object:
+                continue
 
-    for x in range(im.width):
-        for y in range(im.height):
-            # 2. determine which square on viewport corresponds to this pixel
-            D = canvas_to_viewport(x, y)
+            intersection = origin + min_distance * direction
 
-            # 3. determine the color seen through that square
-            color = trace_pixel_ray(scene, camera_origin, D, 1, 1000)
+            normal_to_surface = normalize(intersection - nearest_object.center)
+            shifted_point = intersection + 1e-5 * normal_to_surface
+            intersection_to_light = normalize(light.position - shifted_point)
 
-            # 4. paint the pixel with that color
-            im.putpixel((x, y), color)
+            _, min_distance = nearest_intersected_object(scene, origin, direction)
+            intersection_to_light_distance = np.linalg.norm(
+                light.position - intersection
+            )
+            is_shadowed = min_distance < intersection_to_light_distance
 
-    return im
+            if is_shadowed:
+                continue
+
+            illumination = np.zeros((3))
+
+            # ambient
+            illumination += nearest_object.ambient * light.ambient
+
+            # diffuse
+            illumination += (
+                nearest_object.diffuse
+                * light.diffuse
+                * np.dot(intersection_to_light, normal_to_surface)
+            )
+
+            # specular
+            intersection_to_camera = normalize(camera - intersection)
+            H = normalize(intersection_to_light + intersection_to_camera)
+            illumination += (
+                nearest_object.specular
+                * light.specular
+                * np.dot(normal_to_surface, H) ** (nearest_object.shininess / 4)
+            )
+
+            image[i, j] = normalize_color(illumination)
+            # print("%d/%d" % (i + 1, height))
+    return image
 
 
-def save(im, img_name="test_image.png"):
-    im.save(img_name)
+def save(image, img_name="test_image.png"):
+    # im.save(img_name)
+    plt.imsave(img_name, image)
 
 
 def main():
-    im, scene = initialize()
-    im = raytrace(im, scene)
-    save(im)
+    image, screen, camera, scene, light = initialize()
+    image = raytrace(image, screen, camera, scene, light)
+    save(image)
 
 
 if __name__ == "__main__":
