@@ -1,35 +1,44 @@
 import numpy as np
+from numba import int32, float64
+from numba.experimental import jitclass
+
+spec = [
+    ("position", float64[:]),
+    ("ambient", float64[:]),
+    ("diffuse", float64[:]),
+    ("specular", float64[:]),
+    ("shininess", int32),
+]
 
 
+@jitclass(spec)
 class PositionalLight:
     def __init__(
         self,
-        x=1.0,
-        y=1.0,
-        z=1.0,
+        position=np.array([1.0, 1.0, 1.0]),
         ambient=np.array(
             [
-                1,
-                1,
-                1,
+                1.0,
+                1.0,
+                1.0,
             ]
         ),
         diffuse=np.array(
             [
-                1,
-                1,
-                1,
+                1.0,
+                1.0,
+                1.0,
             ]
         ),
         specular=np.array(
             [
-                1,
-                1,
-                1,
+                1.0,
+                1.0,
+                1.0,
             ]
         ),
     ):
-        self.position = np.array((x, y, z))
+        self.position = position
         self.ambient = ambient
         self.diffuse = diffuse
         self.specular = specular

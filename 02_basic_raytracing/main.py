@@ -1,16 +1,20 @@
 from random import choice
+from typing import List
 import matplotlib.pyplot as plt
 import numpy as np
+import numba
+from numba import jit, float64, optional
 from shapes import Sphere
 from lights import PositionalLight
 
-IMAGE_WIDTH = 400  # 1920  # 1920
-IMAGE_HEIGHT = 400  # 1080  # 1080
+IMAGE_WIDTH = 1920
+IMAGE_HEIGHT = 1080
 IMAGE_RATIO = float(IMAGE_WIDTH) / IMAGE_HEIGHT
 
 BACKGROUND_COLOR = np.zeros((255, 255, 255))
 
 
+@jit()
 def initialize():
     image = np.zeros((IMAGE_HEIGHT, IMAGE_WIDTH, 3))
 
@@ -18,48 +22,98 @@ def initialize():
     camera = np.array([0, 0, 1])
 
     scene = [
-        Sphere(-0.2, 0, -1, radius=0.7, diffuse=np.array([218, 255, 63]), shininess=70),
         Sphere(
-            0.1, -0.3, 0, radius=0.1, diffuse=np.array([0, 255, 205]), shininess=100
+            np.array([-0.2, 0.0, -1.0]),
+            0.7,
+            np.array([218.0, 255.0, 63.0]),
+            70,
+            np.array([0.0, 0.0, 0.0]),
+            np.array([1.0, 1.0, 1.0]),
         ),
-        Sphere(-0.3, 0, 0, radius=0.15, diffuse=np.array([27, 44, 193]), shininess=100),
-        Sphere(0.5, 1, 0, radius=0.05, shininess=20),
+        Sphere(
+            np.array([0.1, -0.3, 0.0]),
+            0.1,
+            np.array([0.0, 255.0, 205.0]),
+            100,
+            np.array([0.0, 0.0, 0.0]),
+            np.array([1.0, 1.0, 1.0]),
+        ),
+        Sphere(
+            np.array([-0.3, 0.0, 0.0]),
+            0.15,
+            np.array([27.0, 44.0, 193.0]),
+            100,
+            np.array([0.0, 0.0, 0.0]),
+            np.array([1.0, 1.0, 1.0]),
+        ),
+        Sphere(
+            np.array([0.5, 1.0, 0.0]),
+            0.05,
+            np.array([189.0, 44.0, 193.0]),
+            20,
+            np.array([0.0, 0.0, 0.0]),
+            np.array([1.0, 1.0, 1.0]),
+        ),
     ]
 
     # random spheres
+
     for _ in range(0, 6):
         scene.append(
             Sphere(
-                x=(np.random.poisson(2, 1) * np.random.normal(0, 1, 1))[0],
-                y=(np.random.poisson(2, 1) * np.random.normal(0, 1, 1))[0],
-                z=(np.random.poisson(2, 1) * np.random.normal(0, 1, 1))[0],
-                radius=np.clip(np.random.normal(0, 1, 1), 0.1, 1)[0],
-                diffuse=np.array(
+                np.array(
                     [
-                        np.clip(np.random.normal(255 // 2, 255 // 2), 0, 255),
-                        np.clip(np.random.normal(255 // 2, 255 // 2), 0, 255),
-                        np.clip(np.random.normal(255 // 2, 255 // 2), 0, 255),
+                        (np.random.poisson(2, 1) * np.random.normal(0, 1, 1))[0],
+                        (np.random.poisson(2, 1) * np.random.normal(0, 1, 1))[0],
+                        (np.random.poisson(2, 1) * np.random.normal(0, 1, 1))[0],
                     ]
                 ),
-                shininess=np.random.poisson(90, 1),
+                0.2,
+                np.array(
+                    [
+                        np.random.normal(255 // 2, 255 // 2),
+                        np.random.normal(255 // 2, 255 // 2),
+                        np.random.normal(255 // 2, 255 // 2),
+                    ]
+                ),
+                100,
+                np.array([0.0, 0.0, 0.0]),
+                np.array([1.0, 1.0, 1.0]),
             )
         )
 
-    for s in scene:
-        print(f"Sphere: {s.x}, {s.y}, {s.z}, radius: {s.radius}, color: {s.diffuse}")
-
-    """
-    
-    """
-
     lights = [
-        PositionalLight(5.0, 5.0, 5.0),
+        PositionalLight(
+            np.array([5.0, 5.0, 5.0]),
+            np.array(
+                [
+                    1.0,
+                    1.0,
+                    1.0,
+                ]
+            ),
+            np.array(
+                [
+                    1.0,
+                    1.0,
+                    1.0,
+                ]
+            ),
+            np.array(
+                [
+                    1.0,
+                    1.0,
+                    1.0,
+                ]
+            ),
+        ),
         # PositionalLight(-5.0, -5.0, 5.0),
     ]
     return image, screen, camera, scene, lights
 
 
-def ray_sphere_intersection(origin, direction, sphere: Sphere):
+@jit()
+def ray_sphere_intersection(origin, direction, sphere: Sphere) -> optional(float64):
     b = 2 * np.dot(direction, origin - sphere.center)
     c = np.linalg.norm(origin - sphere.center) ** 2 - sphere.radius ** 2
     delta = b ** 2 - 4 * c
@@ -71,15 +125,20 @@ def ray_sphere_intersection(origin, direction, sphere: Sphere):
     return None
 
 
+@jit()
 def normalize(vector):
     return vector / np.linalg.norm(vector)
 
 
+@jit()
 def normalize_color(vector):
     return np.clip(vector / 255, 0, 1)
 
 
-def nearest_intersected_object(objects, ray_origin, ray_direction):
+@jit()
+def nearest_intersected_object(
+    objects: List[Sphere], ray_origin, ray_direction
+) -> numba.types.Tuple((optional(Sphere), float64)):
     distances = [
         ray_sphere_intersection(ray_origin, ray_direction, obj) for obj in objects
     ]
@@ -94,6 +153,7 @@ def nearest_intersected_object(objects, ray_origin, ray_direction):
     return nearest_object, min_distance
 
 
+@jit()
 def compute_lighting(
     lights,
     scene,
@@ -140,6 +200,7 @@ def compute_lighting(
     return illumination
 
 
+@jit()
 def raytrace(image, screen, camera, scene, lights):
     # main code goes here
     for i, y in enumerate(np.linspace(screen[1], screen[3], IMAGE_HEIGHT)):
@@ -174,7 +235,6 @@ def raytrace(image, screen, camera, scene, lights):
             )
 
             image[i, j] = normalize_color(illumination)
-        print(f"Progress: {i/IMAGE_HEIGHT * 100:.1f}%")
 
     return image
 
