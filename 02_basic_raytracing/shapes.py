@@ -8,9 +8,9 @@ class Sphere:
         y=1,
         z=1,
         radius=1,
-        ambient=np.array([0.1, 0.1, 0.1]),
-        diffuse=np.array([240, 58, 71]),
-        specular=np.array([255, 255, 255]),
+        ambient=np.array([0, 0, 0]),
+        diffuse=np.array([1, 1, 1]),
+        specular=np.array([1, 1, 1]),
         shininess=100,
     ):
         self.x = x
